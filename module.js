@@ -150,7 +150,7 @@ function _module(config) {
     });
 
     onkyoDiscover.on('error', (err) => {
-
+        logger.error(err);
     });
 
     this.setPowerState = (id, state) => {
