@@ -12,8 +12,13 @@ function _module(config) {
     const logger = require('sentinel-common').logger;
     const equals = require('deep-equal');
 
+    logger.silly = function(v){
+        logger.debug(v);
+    };
+
     const OnkyoDiscover = require('onkyo.js').OnkyoDiscover;
-    const onkyoDiscover = new OnkyoDiscover();
+    const Onkyo = require('onkyo.js').Onkyo;
+    const onkyoDiscover = new OnkyoDiscover({logger:logger});
 
     let pub = redis.createClient(
         {
@@ -54,9 +59,12 @@ function _module(config) {
     });
 
 	let that = this;
-
-    onkyoDiscover.discover();
-
+/*
+    onkyoDiscover.discover()
+        .catch( (err) =>{
+            logger.error(`discover => ${err}`);
+        });
+*/
     function processDevice( d ){
         let device = { 'current' : {} };
         device['name'] = d.name;
@@ -109,34 +117,33 @@ function _module(config) {
             })
     }
 
-    onkyoDiscover.on('detected', (d) => {
-
-        let device = processDevice(d.device);
-        device._device = d;
+    function newDevice(d){
+        let device = processDevice(d);
+        device._device = new Onkyo(d);
         deviceCache.set(device.id, device);
 
         // power
-        d.on('PWR', (value) =>{
+        device._device.on('PWR', (value) =>{
             setVariable ( device.id, { on : value.PWR }  );
         });
 
         // sound mode
-        d.on('LMD', (value) =>{
+        device._device.on('LMD', (value) =>{
             setVariable ( device.id, { soundMode : value.LMD }  );
         });
 
         //mute
-        d.on('AMT', (value) =>{
+        device._device.on('AMT', (value) =>{
             setVariable ( device.id, { mute : value.AMT }  );
         });
 
         // volume
-        d.on('MVL', (value) =>{
+        device._device.on('MVL', (value) =>{
             setVariable ( device.id, { volume : value.MVL }  );
         });
 
         // source
-        d.on('SLI', (value) =>{
+        device._device.on('SLI', (value) =>{
             setVariable ( device.id, { source : value.SLI }  );
         });
 
@@ -147,6 +154,14 @@ function _module(config) {
             .catch( (err) =>{
                 logger.error(err);
             });
+    }
+
+    config.devices.forEach( (d) => {
+        newDevice(d);
+    });
+
+    onkyoDiscover.on('detected', (d) => {
+        newDevice(d.device);
     });
 
     onkyoDiscover.on('error', (err) => {
